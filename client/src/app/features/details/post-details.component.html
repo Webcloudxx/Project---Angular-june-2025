@@ -1,0 +1,21 @@
+<ng-container *ngIf="post$ | async as p">
+  <h2>{{p.title}}</h2>
+  <p>{{p.content}}</p>
+  <small>{{p.authorName}} · {{p.createdAt | date:'short'}}</small>
+  <div style="margin:8px 0;">
+    <button (click)="toggleLike()">❤️ Like ({{p.likeCount}})</button>
+  </div>
+
+  <h3>Comments ({{p.commentCount}})</h3>
+  <ul>
+    <li *ngFor="let c of (comments$ | async)">
+      <strong>{{c.authorName}}</strong> — <small>{{c.createdAt | date:'short'}}</small>
+      <div>{{c.text}}</div>
+    </li>
+  </ul>
+
+  <form (ngSubmit)="addComment(comment.value); comment.value=''">
+    <input #comment required placeholder="Write a comment..." />
+    <button type="submit">Send</button>
+  </form>
+</ng-container>

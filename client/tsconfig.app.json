@@ -4,6 +4,10 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "./out-tsc/app",
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "useDefineForClassFields": false,
     "types": []
   },
   "files": [
@@ -11,5 +15,6 @@
   ],
   "include": [
     "src/**/*.d.ts"
-  ]
+  ],
+
 }

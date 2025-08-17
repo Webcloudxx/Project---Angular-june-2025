@@ -1,0 +1,16 @@
+{
+  "posts": [
+    {
+      "id": "1",
+      "title": "My first post",
+      "content": "This is a demo post.",
+      "authorId": "demo",
+      "authorName": "Demo User",
+      "createdAt": 1690000000000,
+      "updatedAt": 1690000000000,
+      "likeCount": 0,
+      "commentCount": 0
+    }
+  ],
+  "comments": []
+}

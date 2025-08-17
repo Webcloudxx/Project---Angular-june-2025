@@ -1,0 +1,28 @@
+<section>
+  <h1>My Posts</h1>
+
+  <div style="margin: 8px 0;">
+    <a routerLink="/create">+ Create new</a>
+  </div>
+
+  <ng-container *ngIf="vm$ | async as items; else loading">
+    <p *ngIf="!items.length">You have no posts yet.</p>
+
+    <ul *ngIf="items.length">
+      <li *ngFor="let p of items">
+        <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;">
+          <div>
+            <a [routerLink]="['/posts', p.id]"><strong>{{ p.title }}</strong></a>
+            <div><small>{{ p.createdAt | date:'short' }}</small></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <a [routerLink]="['/edit', p.id]">Edit</a>
+            <button type="button" (click)="delete(p.id)">Delete</button>
+          </div>
+        </div>
+      </li>
+    </ul>
+  </ng-container>
+
+  <ng-template #loading>Loading…</ng-template>
+</section>

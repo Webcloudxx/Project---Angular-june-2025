@@ -13,10 +13,11 @@
     "isolatedModules": true,
     "esModuleInterop": true,
     "experimentalDecorators": true,
-    "moduleResolution": "bundler",
+    "moduleResolution": "nodenext",
     "importHelpers": true,
     "target": "ES2022",
-    "module": "ES2022"
+    "forceConsistentCasingInFileNames": true,
+    "module": "nodenext"
   },
   "angularCompilerOptions": {
     "enableI18nLegacyMessageIdFormat": false,

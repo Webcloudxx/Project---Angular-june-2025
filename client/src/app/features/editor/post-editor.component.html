@@ -1,0 +1,11 @@
+<form [formGroup]="form" (ngSubmit)="save()">
+  <label>Title <input formControlName="title" /></label>
+  <div *ngIf="form.controls.title.touched && form.controls.title.invalid">Title required (max 80)</div>
+
+  <label>Content <textarea formControlName="content" rows="6"></textarea></label>
+  <div *ngIf="form.controls.content.touched && form.controls.content.invalid">Min 10 chars</div>
+
+  <label>Media URL (optional) <input formControlName="mediaUrl" /></label>
+
+  <button type="submit" [disabled]="form.invalid">Save</button>
+</form>
