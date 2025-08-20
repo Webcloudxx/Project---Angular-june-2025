@@ -1,21 +1,25 @@
-<ng-container *ngIf="post$ | async as p">
-  <h2>{{p.title}}</h2>
-  <p>{{p.content}}</p>
-  <small>{{p.authorName}} · {{p.createdAt | date:'short'}}</small>
-  <div style="margin:8px 0;">
-    <button (click)="toggleLike()">❤️ Like ({{p.likeCount}})</button>
+<div *ngIf="post$ | async as p; else loading">
+  <h2>{{ p.title }}</h2>
+  <p style="white-space: pre-wrap">{{ p.content }}</p>
+  <div *ngIf="p.mediaUrl">
+    <img [src]="p.mediaUrl" alt="media" style="max-width:100%; border-radius:8px; margin:8px 0;" />
   </div>
 
-  <h3>Comments ({{p.commentCount}})</h3>
-  <ul>
-    <li *ngFor="let c of (comments$ | async)">
-      <strong>{{c.authorName}}</strong> — <small>{{c.createdAt | date:'short'}}</small>
-      <div>{{c.text}}</div>
-    </li>
-  </ul>
+  <button type="button" (click)="toggleLike()">❤️ Like ({{ p.likeCount || 0 }})</button>
 
-  <form (ngSubmit)="addComment(comment.value); comment.value=''">
-    <input #comment required placeholder="Write a comment..." />
-    <button type="submit">Send</button>
-  </form>
-</ng-container>
+  <section style="margin-top:16px">
+    <h3>Comments</h3>
+    <ul>
+      <li *ngFor="let c of (comments$ | async)">
+        <strong>{{ c.authorName }}:</strong> {{ c.text }}
+      </li>
+    </ul>
+
+    <form [formGroup]="form" (ngSubmit)="addComment()" style="margin-top:8px; display:flex; gap:8px;">
+      <input formControlName="text" placeholder="Write a comment..." style="flex:1;" />
+      <button type="submit" [disabled]="form.invalid">Comment</button>
+    </form>
+  </section>
+</div>
+
+<ng-template #loading>Loading…</ng-template>

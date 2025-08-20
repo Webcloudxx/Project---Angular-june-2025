@@ -1,43 +1,46 @@
-import { Injectable } from '@angular/core';
-import { BehaviorSubject, map } from 'rxjs';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { BehaviorSubject, map, tap } from 'rxjs';
 
-export interface AuthUser { id: number; email: string; }
+export interface AuthUser { id: string; email: string; }
 interface AuthResponse { accessToken: string; user: AuthUser; }
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
-  private api = 'http://localhost:3000'; // same as server.mjs
-  private _user$ = new BehaviorSubject<AuthUser | null>(this.loadUser());
-  readonly user$ = this._user$.asObservable();
-  readonly isLoggedIn$ = this.user$.pipe(map(u => !!u));
-  get uid() { return this._user$.value ? String(this._user$.value.id) : null; }
+  private http = inject(HttpClient);
+  private api = 'http://localhost:4000/api';
 
-  constructor(private http: HttpClient) {}
+  private _user$ = new BehaviorSubject<AuthUser | null>(this.loadUser());
+  user$ = this._user$.asObservable();
+  isLoggedIn$ = this.user$.pipe(map(u => !!u));
 
   private loadUser(): AuthUser | null {
-    const raw = localStorage.getItem('user');
-    return raw ? JSON.parse(raw) as AuthUser : null;
+    try { return JSON.parse(localStorage.getItem('user') || 'null'); }
+    catch { return null; }
   }
+
   private persist(r: AuthResponse) {
     localStorage.setItem('token', r.accessToken);
     localStorage.setItem('user', JSON.stringify(r.user));
     this._user$.next(r.user);
   }
 
-  async register(email: string, password: string) {
-    const res = await this.http.post<AuthResponse>(`${this.api}/register`, { email, password }).toPromise();
-    if (res) this.persist(res);
+  login(email: string, password: string) {
+    return this.http.post<AuthResponse>(`${this.api}/login`, { email, password })
+      .pipe(tap(r => this.persist(r)));
   }
 
-  async login(email: string, password: string) {
-    const res = await this.http.post<AuthResponse>(`${this.api}/login`, { email, password }).toPromise();
-    if (res) this.persist(res);
+  register(email: string, password: string) {
+    return this.http.post<AuthResponse>(`${this.api}/register`, { email, password })
+      .pipe(tap(r => this.persist(r)));
   }
 
-  async logout() {
+  logout() {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     this._user$.next(null);
   }
+
+  get currentUser() { return this._user$.value; }
+  get token() { return localStorage.getItem('token'); }
 }

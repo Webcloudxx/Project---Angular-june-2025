@@ -1,8 +1,9 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { FormBuilder, Validators, ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { AuthService } from '../../core/auth/auth.service.js';
 import { CommonModule } from '@angular/common';
+import { firstValueFrom } from 'rxjs';
+import { AuthService } from '../../core/auth/auth.service.js';
 
 @Component({
   standalone: true,
@@ -16,18 +17,27 @@ export class LoginComponent {
   private auth = inject(AuthService);
   private router = inject(Router);
 
+  loading = false;
+
   form = this.fb.nonNullable.group({
     email: ['', [Validators.required, Validators.email]],
     password: ['', [Validators.required, Validators.minLength(6)]]
   });
 
   async submit() {
+    if (this.form.invalid || this.loading) return;
+    this.loading = true;
     try {
       const { email, password } = this.form.getRawValue();
-      await this.auth.login(email, password);
-      this.router.navigate(['/']);
+      console.log('[login] submit', email);
+      await firstValueFrom(this.auth.login(email, password));
+      console.log('[login] success, navigating /');
+      await this.router.navigate(['/']);
     } catch (err: any) {
-      alert('Login failed: ' + (err?.message ?? err));
+      console.error('[login] error', err);
+      alert('Login failed: ' + (err?.error?.message ?? err?.message ?? 'Unknown error'));
+    } finally {
+      this.loading = false;
     }
   }
 }

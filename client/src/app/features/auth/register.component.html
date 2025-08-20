@@ -1,22 +1,16 @@
-<h2>Register</h2>
-<form [formGroup]="form" (ngSubmit)="submit()">
-  <label>Email
-    <input type="email" formControlName="email">
-  </label>
-  <div *ngIf="form.controls.email.touched && form.controls.email.invalid">
-    Valid email required
-  </div>
+<form [formGroup]="form" (ngSubmit)="submit()" style="max-width:360px;margin:24px auto;display:grid;gap:12px;">
+  <h2>Register</h2>
 
-  <label>Password
-    <input type="password" formControlName="password">
-  </label>
-  <label>Confirm Password
-    <input type="password" formControlName="confirm">
-  </label>
-  <div *ngIf="form.controls.password.touched && form.controls.password.invalid">
-    Password min 6 chars
-  </div>
+  <label>Email</label>
+  <input type="email" formControlName="email" placeholder="you@example.com" />
 
-  <button type="submit" [disabled]="form.invalid">Register</button>
+  <label>Password</label>
+  <input type="password" formControlName="password" placeholder="••••••••" />
+
+  <label>Confirm password</label>
+  <input type="password" formControlName="confirm" placeholder="••••••••" />
+
+  <button type="submit" [disabled]="form.invalid || loading">
+    {{ loading ? 'Creating…' : 'Create account' }}
+  </button>
 </form>
-<a routerLink="/login">Already have an account? Login</a>

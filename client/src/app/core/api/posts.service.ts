@@ -18,7 +18,7 @@ export interface Post {
 @Injectable({ providedIn: 'root' })
 export class PostsService {
   private http = inject(HttpClient);
-  private base = 'http://localhost:3000/posts';
+  private base = 'http://localhost:4000/api/posts';
 
   list(): Observable<Post[]> {
     return this.http.get<Post[]>(this.base);

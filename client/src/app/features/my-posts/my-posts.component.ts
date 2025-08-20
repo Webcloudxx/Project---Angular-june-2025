@@ -21,7 +21,7 @@ export class MyPostsComponent implements OnInit {
 
   ngOnInit() {
     this.vm$ = this.auth.user$.pipe(
-      switchMap(u => u ? this.posts.byAuthor(u.uid) : of([])),
+      switchMap(u => u ? this.posts.byAuthor(String(u.id)) : of([])),
       map(items => items ?? [])
     );
   }

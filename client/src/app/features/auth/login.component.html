@@ -1,19 +1,17 @@
-<h2>Login</h2>
-<form [formGroup]="form" (ngSubmit)="submit()">
-  <label>Email
-    <input type="email" formControlName="email">
-  </label>
-  <div *ngIf="form.controls.email.touched && form.controls.email.invalid">
-    Valid email required
-  </div>
+<form [formGroup]="form" (ngSubmit)="submit()" style="max-width:360px;margin:24px auto;display:grid;gap:12px;">
+  <h2>Login</h2>
 
-  <label>Password
-    <input type="password" formControlName="password">
-  </label>
-  <div *ngIf="form.controls.password.touched && form.controls.password.invalid">
-    Password min 6 chars
-  </div>
+  <label>Email</label>
+  <input type="email" formControlName="email" placeholder="you@example.com" />
 
-  <button type="submit" [disabled]="form.invalid">Login</button>
+  <label>Password</label>
+  <input type="password" formControlName="password" placeholder="••••••••" />
+
+  <button type="submit" [disabled]="form.invalid || loading">
+    {{ loading ? 'Signing in…' : 'Login' }}
+  </button>
+
+  <div *ngIf="form.invalid" style="color:#c00;font-size:13px;">
+    • Enter a valid email and 6+ char password.
+  </div>
 </form>
-<a routerLink="/register">No account? Register</a>
