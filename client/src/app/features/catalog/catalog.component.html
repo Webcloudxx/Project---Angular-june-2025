@@ -1,14 +1,7 @@
-<section>
-  <h1>Latest Builds</h1>
-  <ng-container *ngIf="vm$ | async as items; else loading">
-    <p *ngIf="!items.length">No posts yet.</p>
-    <ul>
-      <li *ngFor="let p of items">
-        <a [routerLink]="['/posts', p.id]"><strong>{{ p.title }}</strong></a>
-        <div>{{ p.content | truncate:140 }}</div>
-        <small>{{ p.authorName }} · {{ p.createdAt | date:'short' }} · ❤️ {{p.likeCount}} · 💬 {{p.commentCount}}</small>
-      </li>
-    </ul>
-  </ng-container>
-  <ng-template #loading>Loading…</ng-template>
-</section>
+<div *ngIf="vm$ | async as posts; else loading">
+  <div *ngFor="let p of posts" style="margin:12px 0;">
+    <a [routerLink]="['/posts', p.id]">{{ p.title }}</a><br />
+    <small>by {{ p.authorName }} · ❤️ {{ p.likeCount || 0 }}</small>
+  </div>
+</div>
+<ng-template #loading>Loading…</ng-template>

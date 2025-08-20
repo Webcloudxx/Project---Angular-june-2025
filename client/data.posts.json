@@ -1,0 +1,16 @@
+{
+  "posts": [
+    {
+      "id": "1",
+      "title": "42342",
+      "content": "4234234234",
+      "authorId": "1755723788875",
+      "authorName": "Sashko@gmail.com",
+      "mediaUrl": null,
+      "likedBy": [],
+      "likeCount": 0,
+      "createdAt": 1755725963446,
+      "updatedAt": 1755725963446
+    }
+  ]
+}

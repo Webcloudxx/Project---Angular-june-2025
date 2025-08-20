@@ -1,36 +1,18 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
+import { Router, ActivatedRoute } from '@angular/router';
 import { CommonModule } from '@angular/common';
-import { FormBuilder, Validators, ReactiveFormsModule } from '@angular/forms';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
+
+import { PostsService, Post } from '../../core/api/posts.service.js';
 import { AuthService } from '../../core/auth/auth.service.js';
-import { PostsService } from '../../core/api/posts.service.js';
 
 @Component({
   standalone: true,
   selector: 'app-post-editor',
-  imports: [CommonModule, ReactiveFormsModule, RouterLink],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <h2>{{ id ? 'Edit post' : 'Create post' }}</h2>
-
-    <form [formGroup]="form" (ngSubmit)="save()">
-      <label>Title
-        <input formControlName="title" />
-      </label>
-      <label>Content
-        <textarea rows="6" formControlName="content"></textarea>
-      </label>
-      <label>Media URL (optional)
-        <input formControlName="mediaUrl" />
-      </label>
-
-      <div style="display:flex; gap:8px; margin-top:10px;">
-        <button type="submit" [disabled]="form.invalid">{{ id ? 'Update' : 'Create' }}</button>
-        <a class="btn-ghost" routerLink="/me">Cancel</a>
-      </div>
-    </form>
-  `
+  templateUrl: './post-editor.component.html',
+  imports: [CommonModule, ReactiveFormsModule],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class PostEditorComponent {
   private fb = inject(FormBuilder);
@@ -47,30 +29,48 @@ export class PostEditorComponent {
     mediaUrl: ['']
   });
 
-  constructor() {
-      if (this.id) {
-    this.posts.byId(this.id).subscribe(p => this.form.patchValue(p));
-      }
+  async ngOnInit() {
+    if (this.id) {
+      const data = await firstValueFrom(this.posts.get(this.id));
+      if (data) this.form.patchValue({
+        title: data.title ?? '',
+        content: data.content ?? '',
+        mediaUrl: data.mediaUrl ?? ''
+      });
+    }
   }
 
   async save() {
-    const user = await firstValueFrom(this.auth.user$);
-    if (!user) { alert('You must be logged in.'); return; }
-
-    const v = this.form.getRawValue();
-    const payload = {
-      title: v.title!,
-      content: v.content!,
-      mediaUrl: v.mediaUrl?.trim() || undefined,
-      authorId: String(user.id),
-      authorName: user.email || 'User'
-    };
-
-    if (this.id) {
-      await firstValueFrom(this.posts.update(this.id, payload));
-    } else {
-      await firstValueFrom(this.posts.create(payload as any));
+    const user = this.auth.currentUser;
+    if (!user) {
+     alert('Please log in to create or edit posts.');
+     return;
     }
-    this.router.navigate(['/me']);
+
+    if (this.form.invalid) {
+     this.form.markAllAsTouched();
+     return;
+    }
+
+    const { title, content, mediaUrl } = this.form.getRawValue();
+
+  // NOTE: do NOT include authorId/authorName; server takes them from the token.
+    const payload: { title: string; content: string; mediaUrl?: string | null } = {
+  title,
+  content,
+  mediaUrl: mediaUrl || null,
+};
+
+    try {
+     if (this.id) {
+       await firstValueFrom(this.posts.update(this.id, payload));
+     } else {
+       await firstValueFrom(this.posts.create(payload));
+     }
+     this.router.navigate(['/me']);
+    } catch (e) {
+     console.error(e);
+     alert('Failed to save post. Are you logged in? (401 = missing/invalid token)');
+    }
   }
 }

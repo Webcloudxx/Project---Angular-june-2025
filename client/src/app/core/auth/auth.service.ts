@@ -1,38 +1,42 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { BehaviorSubject, map, tap } from 'rxjs';
+import { BehaviorSubject, tap } from 'rxjs';
 
-export interface AuthUser { id: string; email: string; }
-interface AuthResponse { accessToken: string; user: AuthUser; }
+export interface AuthUser { id: string; email: string }
+const API = 'http://localhost:4000/api';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private http = inject(HttpClient);
-  private api = 'http://localhost:4000/api';
+  private _user$ = new BehaviorSubject<AuthUser | null>(null);
 
-  private _user$ = new BehaviorSubject<AuthUser | null>(this.loadUser());
   user$ = this._user$.asObservable();
-  isLoggedIn$ = this.user$.pipe(map(u => !!u));
+  isLoggedIn$ = this.user$.pipe(tap());
 
-  private loadUser(): AuthUser | null {
-    try { return JSON.parse(localStorage.getItem('user') || 'null'); }
-    catch { return null; }
-  }
-
-  private persist(r: AuthResponse) {
-    localStorage.setItem('token', r.accessToken);
-    localStorage.setItem('user', JSON.stringify(r.user));
-    this._user$.next(r.user);
+  constructor() {
+    const raw = localStorage.getItem('user');
+    const token = localStorage.getItem('token');
+    if (raw && token) this._user$.next(JSON.parse(raw));
   }
 
   login(email: string, password: string) {
-    return this.http.post<AuthResponse>(`${this.api}/login`, { email, password })
-      .pipe(tap(r => this.persist(r)));
+    return this.http.post<{ token: string; user: AuthUser }>(`${API}/login`, { email, password }).pipe(
+      tap(res => {
+        localStorage.setItem('token', res.token);
+        localStorage.setItem('user', JSON.stringify(res.user));
+        this._user$.next(res.user);
+      })
+    );
   }
 
   register(email: string, password: string) {
-    return this.http.post<AuthResponse>(`${this.api}/register`, { email, password })
-      .pipe(tap(r => this.persist(r)));
+    return this.http.post<{ token: string; user: AuthUser }>(`${API}/register`, { email, password }).pipe(
+      tap(res => {
+        localStorage.setItem('token', res.token);
+        localStorage.setItem('user', JSON.stringify(res.user));
+        this._user$.next(res.user);
+      })
+    );
   }
 
   logout() {
@@ -41,6 +45,6 @@ export class AuthService {
     this._user$.next(null);
   }
 
-  get currentUser() { return this._user$.value; }
-  get token() { return localStorage.getItem('token'); }
+  get token(): string | null { return localStorage.getItem('token'); }
+  get currentUser(): AuthUser | null { return this._user$.value; }
 }

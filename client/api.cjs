@@ -1,165 +1,243 @@
 const express = require('express');
 const cors = require('cors');
-const bcrypt = require('bcryptjs');
+const bodyParser = require('body-parser');
 const jwt = require('jsonwebtoken');
-const Datastore = require('nedb-promises');
+const { Low } = require('lowdb');
+const { JSONFile } = require('lowdb/node');
 const path = require('path');
 
 const app = express();
-const PORT = process.env.PORT || 4000;
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
-
-const dataDir = path.join(__dirname, 'data');
-const users = Datastore.create({ filename: path.join(dataDir, 'users.db'), autoload: true });
-const posts = Datastore.create({ filename: path.join(dataDir, 'posts.db'), autoload: true });
-const comments = Datastore.create({ filename: path.join(dataDir, 'comments.db'), autoload: true });
-
 app.use(cors());
-app.use(express.json());
+app.use(bodyParser.json());
 
-function signToken(user) {
-  return jwt.sign({ id: user._id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
-}
-function authRequired(req, res, next) {
-  const hdr = req.headers.authorization || '';
-  const [, token] = hdr.split(' ');
-  if (!token) return res.status(401).json({ message: 'Missing token' });
-  try {
-    req.user = jwt.verify(token, JWT_SECRET);
+// --- JWT ---
+const SECRET = process.env.JWT_SECRET || 'dev-secret-key';
+const sign = (user) => jwt.sign({ id: user.id, email: user.email }, SECRET, { expiresIn: '12h' });
+
+const auth = (req, res, next) => {
+  const hdr = req.headers['authorization'];
+  if (!hdr) return res.sendStatus(401);
+  const token = hdr.split(' ')[1];
+  jwt.verify(token, SECRET, (err, decoded) => {
+    if (err) return res.sendStatus(403);
+    req.user = decoded;
     next();
-  } catch {
-    res.status(401).json({ message: 'Invalid token' });
-  }
-}
-function isOwner(resource, userIdField, req) {
-  return resource[userIdField] === req.user.id;
+  });
+};
+
+const maybeAuth = (req, _res, next) => {
+  const hdr = req.headers['authorization'];
+  if (!hdr) return next();
+  const token = hdr.split(' ')[1];
+  jwt.verify(token, SECRET, (err, decoded) => {
+    if (!err) req.user = decoded;
+    next();
+  });
+};
+
+// --- DB (lowdb) ---
+const file = path.join(process.cwd(), 'db.json');
+const adapter = new JSONFile(file);
+const db = new Low(adapter, { users: [], posts: [] });
+
+async function initDb() {
+  await db.read();
+  // default structure
+  db.data ||= { users: [], posts: [] };
+  db.data.users ||= [];
+  db.data.posts ||= [];
+  await db.write();
 }
 
+function sanitizePost(p, userId) {
+  const likes = Array.isArray(p.likes) ? p.likes : [];
+  return {
+    id: String(p.id),
+    title: p.title || '',
+    content: p.content || '',
+    mediaUrl: p.mediaUrl ?? null,
+    authorId: String(p.authorId || ''),
+    authorName: p.authorName || '',
+    likeCount: likes.length,
+    likedByMe: userId ? likes.includes(String(userId)) : false,
+    commentCount: typeof p.commentCount === 'number' ? p.commentCount : 0,
+    createdAt: p.createdAt || null,
+  };
+}
+
+// ------------- Auth -------------
 app.post('/api/register', async (req, res) => {
-  const { email, password } = req.body || {};
-  if (!email || !password) return res.status(400).json({ message: 'Email & password required' });
+  try {
+    await initDb();
+    const { email, password } = req.body || {};
+    if (!email || !password) return res.status(400).json({ message: 'email & password required' });
+    const users = db.data.users;
+    if (users.find(u => u.email === email)) return res.status(400).json({ message: 'User already exists' });
 
-  const existing = await users.findOne({ email });
-  if (existing) return res.status(409).json({ message: 'Email already registered' });
+    const user = { id: Date.now().toString(), email, password }; // plain text pw for dev
+    users.push(user);
+    await db.write();
 
-  const hash = await bcrypt.hash(password, 10);
-  const user = await users.insert({ email, password: hash, createdAt: Date.now() });
-  const token = signToken(user);
-  res.json({ accessToken: token, user: { id: user._id, email: user.email } });
+    const token = sign(user);
+    return res.json({ token, user: { id: user.id, email: user.email } });
+  } catch (e) {
+    console.error('REGISTER ERROR', e);
+    res.sendStatus(500);
+  }
 });
 
 app.post('/api/login', async (req, res) => {
-  const { email, password } = req.body || {};
-  const user = await users.findOne({ email });
-  if (!user) return res.status(401).json({ message: 'Invalid credentials' });
+  try {
+    await initDb();
+    const { email, password } = req.body || {};
+    const users = db.data.users || [];
+    const user = users.find(u => u.email === email && u.password === password);
+    if (!user) return res.status(401).json({ message: 'Invalid credentials' });
 
-  const ok = await bcrypt.compare(password, user.password);
-  if (!ok) return res.status(401).json({ message: 'Invalid credentials' });
-
-  const token = signToken(user);
-  res.json({ accessToken: token, user: { id: user._id, email: user.email } });
+    const token = sign(user);
+    return res.json({ token, user: { id: user.id, email: user.email } });
+  } catch (e) {
+    console.error('LOGIN ERROR', e);
+    res.sendStatus(500);
+  }
 });
 
-app.get('/api/me', authRequired, async (req, res) => {
-  const user = await users.findOne({ _id: req.user.id });
-  if (!user) return res.status(404).json({ message: 'Not found' });
-  res.json({ id: user._id, email: user.email, createdAt: user.createdAt });
+app.get('/api/me', auth, (req, res) => res.json(req.user));
+
+// ------------- Posts -------------
+app.get('/api/posts', maybeAuth, async (req, res) => {
+  try {
+    await initDb();
+    const q = (req.query.q || '').toString().toLowerCase();
+    const authorId = req.query.authorId ? String(req.query.authorId) : null;
+
+    let posts = db.data.posts || [];
+    if (authorId) {
+      posts = posts.filter(p => String(p.authorId) === authorId);
+    }
+    if (q) {
+      posts = posts.filter(p =>
+        (p.title || '').toLowerCase().includes(q) ||
+        (p.content || '').toLowerCase().includes(q)
+      );
+    }
+    res.json(posts.map(p => sanitizePost(p, req.user?.id)));
+  } catch (e) {
+    console.error('LIST POSTS ERROR', e);
+    res.sendStatus(500);
+  }
 });
 
-app.get('/api/posts', async (req, res) => {
-  const { authorId, q } = req.query;
-  const query = {};
-  if (authorId) query.authorId = authorId;
-  if (q) query.title = new RegExp(q, 'i');
-
-  const list = await posts.find(query);
-  list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  res.json(list);
+app.get('/api/posts/:id', maybeAuth, async (req, res) => {
+  try {
+    await initDb();
+    const id = String(req.params.id);
+    const p = (db.data.posts || []).find(x => String(x.id) === id);
+    if (!p) return res.sendStatus(404);
+    res.json(sanitizePost(p, req.user?.id));
+  } catch (e) {
+    console.error('GET POST ERROR', e);
+    res.sendStatus(500);
+  }
 });
 
-app.get('/api/posts/:id', async (req, res) => {
-  const doc = await posts.findOne({ _id: req.params.id });
-  if (!doc) return res.status(404).json({ message: 'Post not found' });
-  res.json(doc);
+app.post('/api/posts', auth, async (req, res) => {
+  try {
+    await initDb();
+    const { title, content, mediaUrl } = req.body || {};
+    if (!title || !content) return res.status(400).json({ message: 'title & content required' });
+
+    const post = {
+      id: Date.now().toString(),
+      title,
+      content,
+      mediaUrl: mediaUrl ?? null,
+      authorId: String(req.user.id),
+      authorName: req.user.email,
+      likes: [],
+      commentCount: 0,
+      createdAt: new Date().toISOString(),
+    };
+    db.data.posts.push(post);
+    await db.write();
+    res.status(201).json(sanitizePost(post, req.user.id));
+  } catch (e) {
+    console.error('CREATE POST ERROR', e);
+    res.sendStatus(500);
+  }
 });
 
-app.post('/api/posts', authRequired, async (req, res) => {
-  const { title, content, mediaUrl } = req.body || {};
-  if (!title || !content) return res.status(400).json({ message: 'Title & content required' });
+app.patch('/api/posts/:id', auth, async (req, res) => {
+  try {
+    await initDb();
+    const id = String(req.params.id);
+    const posts = db.data.posts || [];
+    const p = posts.find(x => String(x.id) === id);
+    if (!p) return res.sendStatus(404);
+    if (String(p.authorId) !== String(req.user.id)) return res.sendStatus(403);
 
-  const doc = await posts.insert({
-    title, content, mediaUrl: mediaUrl?.trim() || undefined,
-    authorId: req.user.id,
-    authorEmail: req.user.email,
-    likeCount: 0,
-    commentCount: 0,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  });
-  res.status(201).json(doc);
+    const { title, content, mediaUrl } = req.body || {};
+    if (title !== undefined) p.title = title;
+    if (content !== undefined) p.content = content;
+    if (mediaUrl !== undefined) p.mediaUrl = mediaUrl;
+    await db.write();
+    res.json(sanitizePost(p, req.user.id));
+  } catch (e) {
+    console.error('UPDATE POST ERROR', e);
+    res.sendStatus(500);
+  }
 });
 
-app.put('/api/posts/:id', authRequired, async (req, res) => {
-  const existing = await posts.findOne({ _id: req.params.id });
-  if (!existing) return res.status(404).json({ message: 'Post not found' });
-  if (!isOwner(existing, 'authorId', req)) return res.status(403).json({ message: 'Not your post' });
-
-  const patch = { ...req.body, updatedAt: Date.now() };
-  const updated = await posts.update({ _id: req.params.id }, { $set: patch }, { returnUpdatedDocs: true });
-  res.json(updated);
+app.delete('/api/posts/:id', auth, async (req, res) => {
+  try {
+    await initDb();
+    const id = String(req.params.id);
+    const posts = db.data.posts || [];
+    const idx = posts.findIndex(x => String(x.id) === id);
+    if (idx === -1) return res.sendStatus(404);
+    if (String(posts[idx].authorId) !== String(req.user.id)) return res.sendStatus(403);
+    posts.splice(idx, 1);
+    await db.write();
+    res.sendStatus(204);
+  } catch (e) {
+    console.error('DELETE POST ERROR', e);
+    res.sendStatus(500);
+  }
 });
 
-app.delete('/api/posts/:id', authRequired, async (req, res) => {
-  const existing = await posts.findOne({ _id: req.params.id });
-  if (!existing) return res.status(404).json({ message: 'Post not found' });
-  if (!isOwner(existing, 'authorId', req)) return res.status(403).json({ message: 'Not your post' });
+app.post('/api/posts/:id/like', auth, async (req, res) => {
+  try {
+    await initDb();
+    const id = String(req.params.id);
+    const posts = db.data.posts || [];
+    const p = posts.find(x => String(x.id) === id);
+    if (!p) return res.sendStatus(404);
 
-  await posts.remove({ _id: req.params.id }, {});
-  await comments.remove({ postId: req.params.id }, { multi: true });
-  res.status(204).end();
+    p.likes = Array.isArray(p.likes) ? p.likes : [];
+    const me = String(req.user.id);
+    const i = p.likes.indexOf(me);
+    if (i === -1) p.likes.push(me);
+    else p.likes.splice(i, 1);
+
+    await db.write();
+    res.json(sanitizePost(p, req.user.id));
+  } catch (e) {
+    console.error('LIKE TOGGLE ERROR', e);
+    res.sendStatus(500);
+  }
 });
 
-app.get('/api/comments', async (req, res) => {
-  const { postId } = req.query;
-  if (!postId) return res.status(400).json({ message: 'postId required' });
+// simple health
+app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
-  const list = await comments.find({ postId });
-  list.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-  res.json(list);
+// error handler (last)
+app.use((err, _req, res, _next) => {
+  console.error('UNHANDLED', err);
+  res.sendStatus(500);
 });
 
-
-app.post('/api/comments', authRequired, async (req, res) => {
-  const { postId, text } = req.body || {};
-  if (!postId || !text) return res.status(400).json({ message: 'postId & text required' });
-
-  const post = await posts.findOne({ _id: postId });
-  if (!post) return res.status(404).json({ message: 'Post not found' });
-
-  const c = await comments.insert({
-    postId,
-    authorId: req.user.id,
-    authorEmail: req.user.email,
-    text,
-    createdAt: Date.now(),
-  });
-  await posts.update({ _id: postId }, { $inc: { commentCount: 1 } });
-  res.status(201).json(c);
-});
-
-app.delete('/api/comments/:id', authRequired, async (req, res) => {
-  const c = await comments.findOne({ _id: req.params.id });
-  if (!c) return res.status(404).json({ message: 'Comment not found' });
-  if (!isOwner(c, 'authorId', req)) return res.status(403).json({ message: 'Not your comment' });
-
-  await comments.remove({ _id: req.params.id }, {});
-  await posts.update({ _id: c.postId }, { $inc: { commentCount: -1 } });
-  res.status(204).end();
-});
-
-app.listen(PORT, () => {
-  console.log(`API running at http://localhost:${PORT}`);
-  console.log(`Auth:    POST /api/register, POST /api/login`);
-  console.log(`Posts:   GET/POST/PUT/DELETE /api/posts(/:id)`);
-  console.log(`Comments:GET/POST/DELETE   /api/comments`);
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, async () => {
+  await initDb();
+  console.log(`API running on http://localhost:${PORT}`);
 });

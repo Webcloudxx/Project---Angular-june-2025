@@ -13,8 +13,11 @@
     }
   ],
   "comments": [],
-  "users": []
-  
+  "users": [
+    {
+      "id": "1755731869918",
+      "email": "Sashko@abv.bg",
+      "password": "123456"
+    }
+  ]
 }
-
-

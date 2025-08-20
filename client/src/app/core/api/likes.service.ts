@@ -4,7 +4,7 @@ import { HttpClient } from '@angular/common/http';
 @Injectable({ providedIn: 'root' })
 export class LikesService {
   private http = inject(HttpClient);
-  private base = 'http://localhost:3000/likes';
+  private base = 'http://localhost:4000/likes';
 
   async toggle(postId: string, uid: string) {
     const id = `${postId}_${uid}`;
