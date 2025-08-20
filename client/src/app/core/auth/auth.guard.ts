@@ -9,7 +9,6 @@ export const AuthGuard: CanActivateFn = () => {
   return auth.isLoggedIn$.pipe(map(ok => ok ? true : router.parseUrl('/login')));
 };
 
-// core/auth/guest.guard.ts
 export const GuestGuard: CanActivateFn = () => {
   const auth = inject(AuthService);
   const router = inject(Router);

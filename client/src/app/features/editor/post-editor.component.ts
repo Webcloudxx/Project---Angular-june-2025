@@ -1,52 +1,76 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit } from '@angular/core';
-import { FormBuilder, Validators, ReactiveFormsModule } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { PostsService } from '../../core/api/posts.service.js';
+import { FormBuilder, Validators, ReactiveFormsModule } from '@angular/forms';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../core/auth/auth.service.js';
-import { switchMap } from 'rxjs/operators';
-import { of } from 'rxjs';
-import { Post } from '../../core/models/post.js';
+import { PostsService } from '../../core/api/posts.service.js';
 
 @Component({
   standalone: true,
-  imports: [ReactiveFormsModule, CommonModule],
-  templateUrl: './post-editor.component.html',
-  changeDetection: ChangeDetectionStrategy.OnPush
+  selector: 'app-post-editor',
+  imports: [CommonModule, ReactiveFormsModule, RouterLink],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `
+    <h2>{{ id ? 'Edit post' : 'Create post' }}</h2>
+
+    <form [formGroup]="form" (ngSubmit)="save()">
+      <label>Title
+        <input formControlName="title" />
+      </label>
+      <label>Content
+        <textarea rows="6" formControlName="content"></textarea>
+      </label>
+      <label>Media URL (optional)
+        <input formControlName="mediaUrl" />
+      </label>
+
+      <div style="display:flex; gap:8px; margin-top:10px;">
+        <button type="submit" [disabled]="form.invalid">{{ id ? 'Update' : 'Create' }}</button>
+        <a class="btn-ghost" routerLink="/me">Cancel</a>
+      </div>
+    </form>
+  `
 })
-export class PostEditorComponent implements OnInit {
+export class PostEditorComponent {
   private fb = inject(FormBuilder);
-  private route = inject(ActivatedRoute);
-  private router = inject(Router);
   private posts = inject(PostsService);
   private auth = inject(AuthService);
+  private router = inject(Router);
+  private route = inject(ActivatedRoute);
 
   id = this.route.snapshot.paramMap.get('id');
-  form = this.fb.group({
-    title: ['', [Validators.required, Validators.maxLength(80)]],
+
+  form = this.fb.nonNullable.group({
+    title: ['', [Validators.required, Validators.minLength(3)]],
     content: ['', [Validators.required, Validators.minLength(10)]],
     mediaUrl: ['']
   });
 
-  ngOnInit() {
-    if (this.id) this.posts.byId(this.id).subscribe(p => p && this.form.patchValue(p));
+  constructor() {
+      if (this.id) {
+    this.posts.byId(this.id).subscribe(p => this.form.patchValue(p));
+      }
   }
 
   async save() {
-  const user = await this.auth.user$.pipe(switchMap(u => of(u))).toPromise();
-  if (!user) return;
+    const user = await firstValueFrom(this.auth.user$);
+    if (!user) { alert('You must be logged in.'); return; }
 
-  const v = this.form.value;
-  const payload = {
-    title: v.title ?? '',
-    content: v.content ?? '',
-    mediaUrl: v.mediaUrl?.trim() ? v.mediaUrl.trim() : undefined,
-    authorId: user.uid,
-    authorName: user.email ?? 'User'
-  } as Omit<Post, 'id'|'createdAt'|'updatedAt'|'likeCount'|'commentCount'>;
+    const v = this.form.getRawValue();
+    const payload = {
+      title: v.title!,
+      content: v.content!,
+      mediaUrl: v.mediaUrl?.trim() || undefined,
+      authorId: String(user.id),
+      authorName: user.email || 'User'
+    };
 
-  if (this.id) await this.posts.update(this.id, payload);
-  else await this.posts.create(payload);
-  this.router.navigate(['/me']);
-}
+    if (this.id) {
+      await firstValueFrom(this.posts.update(this.id, payload));
+    } else {
+      await firstValueFrom(this.posts.create(payload as any));
+    }
+    this.router.navigate(['/me']);
+  }
 }

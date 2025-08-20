@@ -1,22 +1,18 @@
 import { Injectable, inject } from '@angular/core';
-import { Firestore, doc, setDoc, deleteDoc, getDoc, updateDoc, increment } from '@angular/fire/firestore';
+import { HttpClient } from '@angular/common/http';
 
 @Injectable({ providedIn: 'root' })
 export class LikesService {
-  private fs = inject(Firestore);
-
-  likeKey(postId: string, uid: string) { return `posts/${postId}/likes/${uid}`; }
+  private http = inject(HttpClient);
+  private base = 'http://localhost:3000/likes';
 
   async toggle(postId: string, uid: string) {
-    const ref = doc(this.fs, this.likeKey(postId, uid));
-    const exists = (await getDoc(ref)).exists();
-    if (exists) {
-      await deleteDoc(ref);
-      await updateDoc(doc(this.fs, 'posts', postId), { likeCount: increment(-1) });
+    const id = `${postId}_${uid}`;
+    try {
+      await this.http.delete(`${this.base}/${id}`).toPromise();
       return { liked: false };
-    } else {
-      await setDoc(ref, { createdAt: Date.now(), uid });
-      await updateDoc(doc(this.fs, 'posts', postId), { likeCount: increment(1) });
+    } catch {
+      await this.http.post(this.base, { id, postId, uid, createdAt: Date.now() }).toPromise();
       return { liked: true };
     }
   }

@@ -1,20 +1,26 @@
 import { Injectable, inject } from '@angular/core';
-import { Firestore, collection, addDoc, collectionData, query, where, orderBy, doc, updateDoc, increment } from '@angular/fire/firestore';
-import { Comment } from '../models/comment.js';
-import { map, shareReplay } from 'rxjs';
+import { HttpClient } from '@angular/common/http';
+import { Observable } from 'rxjs';
+
+export interface Comment {
+  id: string | number;
+  postId: string | number;
+  authorId: string;
+  authorName: string;
+  text: string;
+  createdAt: number;
+}
 
 @Injectable({ providedIn: 'root' })
 export class CommentsService {
-  private fs = inject(Firestore);
-  private col = collection(this.fs, 'comments');
+  private http = inject(HttpClient);
+  private base = 'http://localhost:3000/comments';
 
-  listForPost(postId: string) {
-    const q = query(this.col, where('postId','==', postId), orderBy('createdAt', 'asc'));
-    return collectionData(q, { idField: 'id' }).pipe(map(x => x as Comment[]), shareReplay(1));
+  listForPost(postId: string | number): Observable<Comment[]> {
+    return this.http.get<Comment[]>(`${this.base}?postId=${postId}`);
   }
 
-  async add(c: Omit<Comment, 'id'|'createdAt'>) {
-    await addDoc(this.col, { ...c, createdAt: Date.now() });
-    await updateDoc(doc(this.fs, 'posts', c.postId), { commentCount: increment(1) });
+  add(c: Omit<Comment, 'id'|'createdAt'>) {
+    return this.http.post<Comment>(this.base, { ...c, createdAt: Date.now() });
   }
 }
